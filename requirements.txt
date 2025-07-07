@@ -20,3 +20,4 @@ python-dotenv
 
 ## pip install googleapis-common-protos google-api-core google-ai-generativelanguage grpcio-status
 
+embeddings = GoogleGenerativeAIEmbeddings(model = )

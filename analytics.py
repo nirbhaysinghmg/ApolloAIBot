@@ -54,8 +54,8 @@ def execute_query(query: str, params: tuple = None, fetch: bool = True) -> Optio
     finally:
         if connection and connection.is_connected():
             cursor.close()
-            connection.close()
 
+            connection.close()
 def record_user_event(user_id: str, session_id: str, event_type: str, event_data: Dict = None):
     if not user_id:
         return
@@ -139,49 +139,26 @@ def record_user_event(user_id: str, session_id: str, event_type: str, event_data
                     (conversation_id, session_id, user_id, session_start_time),
                     fetch=False
                 )
-                # Insert a "session_start" system message
-                execute_query(
-                    """
-                    INSERT INTO messages 
-                      (message_id, conversation_id, user_id, message_type, content, timestamp)
-                    VALUES (UUID(), %s, %s, 'system', 'session_start', %s)
-                    """,
-                    (conversation_id, user_id, session_start_time),
-                    fetch=False
-                )
             else:
-                # Find the active conversation for this session
-                conv = execute_query(
+                # Get the active conversation
+                conversation = execute_query(
                     """
-                    SELECT conversation_id
-                      FROM conversations
-                     WHERE session_id = %s
-                       AND status = 'active'
-                     ORDER BY start_time DESC
-                     LIMIT 1
+                    SELECT conversation_id 
+                    FROM conversations 
+                    WHERE session_id = %s AND status = 'active'
                     """,
                     (session_id,)
                 )
-                if conv:
-                    conversation_id = conv[0]["conversation_id"]
-                    # Insert the user's question into messages
+                if conversation:
+                    conversation_id = conversation[0]['conversation_id']
+                    # Insert the user's question
                     execute_query(
                         """
                         INSERT INTO messages 
-                          (message_id, conversation_id, user_id, message_type, content, timestamp)
+                        (message_id, conversation_id, user_id, message_type, content, timestamp)
                         VALUES (UUID(), %s, %s, 'user', %s, %s)
                         """,
-                        (conversation_id, user_id, event_data.get("question", ""), timestamp),
-                        fetch=False
-                    )
-                    # Update user row: bump total_messages
-                    execute_query(
-                        """
-                        UPDATE users
-                          SET total_messages = total_messages + 1
-                        WHERE user_id = %s
-                        """,
-                        (user_id,),
+                        (conversation_id, user_id, event_data.get('question', ''), timestamp),
                         fetch=False
                     )
 
@@ -238,17 +215,7 @@ def record_user_event(user_id: str, session_id: str, event_type: str, event_data
                     (timestamp, timestamp, conversation_id),
                     fetch=False
                 )
-                # 3) Add a "session_end" system message
-                execute_query(
-                    """
-                    INSERT INTO messages 
-                      (message_id, conversation_id, user_id, message_type, content, timestamp)
-                    VALUES (UUID(), %s, %s, 'system', 'session_end', %s)
-                    """,
-                    (conversation_id, user_id, timestamp),
-                    fetch=False
-                )
-                # 4) Retrieve that duration we just computed
+                # 3) Retrieve that duration we just computed
                 result = execute_query(
                     """
                     SELECT duration
@@ -261,7 +228,7 @@ def record_user_event(user_id: str, session_id: str, event_type: str, event_data
                     session_duration = result[0]["duration"] or 0
                 else:
                     session_duration = 0
-                # 5) Update the user row:
+                # 4) Update the user row:
                 execute_query(
                     """
                     UPDATE users

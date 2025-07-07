@@ -122,6 +122,7 @@ SYSTEM_PROMPT = PromptTemplate(
     input_variables=["context", "question", "chat_history"],
     template="""You are a helpful tyre information assistant for Apollo Tyres. Your role is to:
 1. Help users find the best tyres for their vehicle (car, SUV, van, bike, scooter, truck, bus, agricultural, industrial, earthmover, etc.).
+2.Respond in the users language, Whatever the users prompt language is 
 2. Provide accurate and concise information about tyre brands, types, rim sizes, and featured products.
 3. Guide users to explore popular brands (e.g., Maruti Suzuki, Hyundai, Hero, Royal Enfield), body types (SUV, sedan, hatchback, etc.), and bike segments (sport touring, city urban, etc.).
 4. If the user asks for a product, show relevant Apollo Tyres products or guide them to the right category.
@@ -219,27 +220,20 @@ async def websocket_endpoint_ws(websocket: WebSocket):
         client = websocket.client
         page_url = "unknown"  # Default value
         
-        # Create new session
-        execute_query(
-            """
-            INSERT INTO sessions 
-              (session_id, user_id, start_time, page_url, message_count, status) 
-            VALUES (%s, %s, %s, %s, 0, 'active')
-            """,
-            (session_id, user_id, session_start_time.isoformat(), page_url),
-            fetch=False
-        )
-
-        # Create new conversation for this session
-        conversation_id = str(uuid.uuid4())
-        execute_query(
-            """
-            INSERT INTO conversations 
-              (conversation_id, session_id, user_id, start_time, status)
-            VALUES (%s, %s, %s, %s, 'active')
-            """,
-            (conversation_id, session_id, user_id, session_start_time.isoformat()),
-            fetch=False
+        # Record session start
+        record_user_event(
+            user_id=user_id,
+            session_id=session_id,
+            event_type="session_start",
+            event_data={
+                "page_url": page_url,
+                "timestamp": session_start_time.isoformat(),
+                "connection_type": "websocket",
+                "client_info": {
+                    "host": client.host if hasattr(client, 'host') else 'unknown',
+                    "port": client.port if hasattr(client, 'port') else 'unknown'
+                }
+            }
         )
         
         while True:
@@ -332,17 +326,6 @@ async def websocket_endpoint_ws(websocket: WebSocket):
                         )
                     else:
                         conversation_id = conversation[0]['conversation_id']
-
-                    # Insert user message into messages table
-                    execute_query(
-                        """
-                        INSERT INTO messages 
-                        (message_id, conversation_id, user_id, message_type, content, timestamp)
-                        VALUES (UUID(), %s, %s, 'user', %s, %s)
-                        """,
-                        (conversation_id, user_id, message["user_input"], message_start_time.isoformat()),
-                        fetch=False
-                    )
                     
                     # Get chat history from message
                     chat_history = message.get("chat_history", [])
@@ -382,17 +365,6 @@ async def websocket_endpoint_ws(websocket: WebSocket):
                             }
                         )
 
-                        # Insert bot message into messages table using the same conversation_id
-                        execute_query(
-                            """
-                            INSERT INTO messages 
-                            (message_id, conversation_id, user_id, message_type, content, timestamp)
-                            VALUES (UUID(), %s, %s, 'bot', %s, %s)
-                            """,
-                            (conversation_id, user_id, answer, datetime.now().isoformat()),
-                            fetch=False
-                        )
-                        
                         # Update chat history
                         chat_histories[session_id].append((message["user_input"], answer))
                         
@@ -412,19 +384,13 @@ async def websocket_endpoint_ws(websocket: WebSocket):
                         if len(chat_histories[session_id]) > 10:
                             chat_histories[session_id] = chat_histories[session_id][-10:]
                         
-                        # Get source documents
-                        # source_docs = result.get("source_documents", [])
-                        # sources = [doc.metadata["source"] for doc in source_docs]
-                        
                         # Send response back to client
                         response = {
                             "text": answer,
-                            # "sources": sources,
                             "done": True
                         }
                         await websocket.send_json(response)
                         print(f"Response sent successfully for session {session_id}")
-                        0.2
                     except Exception as e:
                         error_msg = f"Error processing request: {str(e)}"
                         print(error_msg)

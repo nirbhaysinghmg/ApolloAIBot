@@ -293,9 +293,8 @@ const ChatWidget = ({ config: userConfig }) => {
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [scheduleFormData, setScheduleFormData] = useState({
     name: "",
-    patientId: "",
-    date: "",
-    timeSlot: "",
+    phoneNumber: "",
+    vehicleType: "",
   });
   const [scheduleFormSubmitted, setScheduleFormSubmitted] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
@@ -436,12 +435,45 @@ const ChatWidget = ({ config: userConfig }) => {
       "booking",
     ];
 
+    const callbackPhrases = [
+      "talk to someone",
+      "talk to an expert",
+      "speak with someone",
+      "speak with an expert",
+      "talk to a person",
+      "speak to a person",
+      "talk to a human",
+      "speak to a human",
+      "connect with expert",
+      "connect with someone",
+      "get expert advice",
+      "need expert help",
+      "want to talk",
+      "want to speak",
+      "need assistance",
+      "need help",
+      "contact expert",
+      "contact someone",
+      "call me back",
+      "callback",
+      "call back",
+      "reach out",
+      "get in touch",
+      "contact me",
+      "call me",
+      "speak to me",
+      "talk to me",
+    ];
+
     const normalizedText = text.toLowerCase().trim();
     const isSchedulingRequest = schedulingPhrases.some((phrase) =>
       normalizedText.includes(phrase.toLowerCase())
     );
+    const isCallbackRequest = callbackPhrases.some((phrase) =>
+      normalizedText.includes(phrase.toLowerCase())
+    );
 
-    if (isSchedulingRequest) {
+    if (isCallbackRequest) {
       setShowScheduleForm(true);
       // Still send the message to get AI response
     }
@@ -489,23 +521,19 @@ const ChatWidget = ({ config: userConfig }) => {
       setScheduleError("Please enter your name");
       return;
     }
-    if (!scheduleFormData.patientId.trim()) {
-      setScheduleError("Please enter your patient ID");
+    if (!scheduleFormData.phoneNumber.trim()) {
+      setScheduleError("Please enter your phone number");
       return;
     }
-    if (!scheduleFormData.date) {
-      setScheduleError("Please select a date");
-      return;
-    }
-    if (!scheduleFormData.timeSlot) {
-      setScheduleError("Please select a time slot");
+    if (!scheduleFormData.vehicleType) {
+      setScheduleError("Please select your vehicle type");
       return;
     }
 
     try {
       // Capture lead in analytics
       const leadResponse = await fetch(
-        `http://localhost:8008/analytics/leads`,
+        `http://150.241.244.252:8008/analytics/leads`,
         {
           method: "POST",
           headers: {
@@ -513,7 +541,7 @@ const ChatWidget = ({ config: userConfig }) => {
           },
           body: JSON.stringify({
             name: scheduleFormData.name,
-            lead_type: "appointment_scheduled",
+            lead_type: "callback_request",
           }),
         }
       );
@@ -524,27 +552,25 @@ const ChatWidget = ({ config: userConfig }) => {
 
       console.log("Lead captured");
 
-      // Add appointment details to chat
+      // Add callback request details to chat
       setChatHistory((prev) => [
         ...prev,
         {
           role: "user",
-          text: `I'd like to schedule an appointment with the following details:
+          text: `I'd like to request a callback with the following details:
 - Name: ${scheduleFormData.name}
-- Patient ID: ${scheduleFormData.patientId}
-- Date: ${scheduleFormData.date}
-- Time: ${scheduleFormData.timeSlot}`,
+- Phone Number: ${scheduleFormData.phoneNumber}
+- Vehicle Type: ${scheduleFormData.vehicleType}`,
         },
       ]);
 
-      // Send appointment details to backend
+      // Send callback request details to backend
       sendMessage({
-        user_input: `Schedule appointment for patient ${scheduleFormData.patientId} named ${scheduleFormData.name} on ${scheduleFormData.date} during ${scheduleFormData.timeSlot}`,
-        appointment_details: {
+        user_input: `Request callback for ${scheduleFormData.name} with phone number ${scheduleFormData.phoneNumber} for ${scheduleFormData.vehicleType}`,
+        callback_details: {
           name: scheduleFormData.name,
-          patient_id: scheduleFormData.patientId,
-          date: scheduleFormData.date,
-          time_slot: scheduleFormData.timeSlot,
+          phone_number: scheduleFormData.phoneNumber,
+          vehicle_type: scheduleFormData.vehicleType,
         },
       });
 
@@ -556,15 +582,14 @@ const ChatWidget = ({ config: userConfig }) => {
       setTimeout(() => {
         setScheduleFormData({
           name: "",
-          patientId: "",
-          date: "",
-          timeSlot: "",
+          phoneNumber: "",
+          vehicleType: "",
         });
         setScheduleFormSubmitted(false);
       }, 1000);
     } catch (error) {
-      console.error("Error submitting appointment:", error);
-      setScheduleError("Failed to submit appointment. Please try again.");
+      console.error("Error submitting callback request:", error);
+      setScheduleError("Failed to submit callback request. Please try again.");
     }
   };
 
@@ -596,7 +621,7 @@ const ChatWidget = ({ config: userConfig }) => {
       // Find the last user message
       const lastUserMsg =
         [...chatHistory].reverse().find((m) => m.role === "user")?.text || "";
-      fetch("http://localhost:8008/analytics/human_handover", {
+      fetch("http://150.241.244.252:8008/analytics/human_handover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -633,7 +658,7 @@ const ChatWidget = ({ config: userConfig }) => {
       "";
 
     // Record chatbot close event
-    fetch("http://localhost:8008/analytics/chatbot_close", {
+    fetch("http://150.241.244.252:8008/analytics/chatbot_close", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -651,7 +676,7 @@ const ChatWidget = ({ config: userConfig }) => {
     }).catch(() => {});
 
     // Record session end event
-    fetch("http://localhost:8008/analytics/session_end", {
+    fetch("http://150.241.244.252:8008/analytics/session_end", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -798,7 +823,7 @@ const ChatWidget = ({ config: userConfig }) => {
           {/* Appointment Scheduling Form */}
           {showScheduleForm && !streaming && (
             <div className="schedule-form-container">
-              <h3>Schedule an Appointment</h3>
+              <h3>Request a Callback</h3>
               {scheduleError && (
                 <div className="form-error">{scheduleError}</div>
               )}
@@ -816,46 +841,36 @@ const ChatWidget = ({ config: userConfig }) => {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="patientId">Patient ID</label>
+                  <label htmlFor="phoneNumber">Phone Number</label>
                   <input
-                    type="text"
-                    id="patientId"
-                    name="patientId"
-                    value={scheduleFormData.patientId}
+                    type="tel"
+                    id="phoneNumber"
+                    name="phoneNumber"
+                    value={scheduleFormData.phoneNumber}
                     onChange={handleScheduleFormChange}
-                    placeholder="Enter your patient ID (e.g., P12345)"
+                    placeholder="Enter your phone number"
                   />
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="date">Appointment Date</label>
-                  <input
-                    type="date"
-                    id="date"
-                    name="date"
-                    value={scheduleFormData.date}
-                    onChange={handleScheduleFormChange}
-                    min={new Date().toISOString().split("T")[0]}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="timeSlot">Time Slot</label>
+                  <label htmlFor="vehicleType">Vehicle Type</label>
                   <select
-                    id="timeSlot"
-                    name="timeSlot"
-                    value={scheduleFormData.timeSlot}
+                    id="vehicleType"
+                    name="vehicleType"
+                    value={scheduleFormData.vehicleType}
                     onChange={handleScheduleFormChange}
                   >
-                    <option value="">Select a time slot</option>
-                    <option value="9:00 AM - 12:00 PM">
-                      9:00 AM - 12:00 PM
-                    </option>
-                    <option value="12:00 PM - 3:00 PM">
-                      12:00 PM - 3:00 PM
-                    </option>
-                    <option value="3:00 PM - 6:00 PM">3:00 PM - 6:00 PM</option>
-                    <option value="6:00 PM - 9:00 PM">6:00 PM - 9:00 PM</option>
+                    <option value="">Select your vehicle type</option>
+                    <option value="Car">Car</option>
+                    <option value="SUV">SUV</option>
+                    <option value="Van">Van</option>
+                    <option value="Bike">Bike</option>
+                    <option value="Scooter">Scooter</option>
+                    <option value="Truck">Truck</option>
+                    <option value="Bus">Bus</option>
+                    <option value="Agricultural">Agricultural</option>
+                    <option value="Industrial">Industrial</option>
+                    <option value="Earthmover">Earthmover</option>
                   </select>
                 </div>
 
@@ -868,7 +883,7 @@ const ChatWidget = ({ config: userConfig }) => {
                     Cancel
                   </button>
                   <button type="submit" className="submit-button">
-                    Schedule Appointment
+                    Request Callback
                   </button>
                 </div>
               </form>
