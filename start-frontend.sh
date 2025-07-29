@@ -4,19 +4,25 @@
 # Detached with nohup, output logged to serve.log, and disowned so it survives logout.
 
 # 1) Change to the project directory
-cd ~/apolotyreaibot || {
-  echo "Directory ~/apolotyreaibot not found. Aborting."
+cd ~/apoloTyreSample || {
+  echo "Directory ~/apolotyresample not found. Aborting."
   exit 1
 }
 
-# 2) Kill any existing process listening on port 5000
-echo "Stopping any process on port 5000..."
-lsof -ti:5000 | xargs -r kill -9
+# 2) Check if SSL certificates exist
+if [ ! -f "./ssl/cert.pem" ] || [ ! -f "./ssl/key.pem" ]; then
+    echo "SSL certificates not found. Generating self-signed certificates..."
+    ./generate-ssl.sh
+fi
 
-# 3) Start the static server on port 5000, detach it, and log output
-nohup npx serve frontend -l 5000 > serve.log 2>&1 &
+# 3) Kill any existing process listening on port 3006
+echo "Stopping any process on port 3006..."
+lsof -ti:3006 | xargs -r kill -9
 
-# 4) Prevent it from being killed when you close the SSH session
+# 4) Start the static server on port 3006 with HTTPS, detach it, and log output
+nohup npx serve frontend -l 3006 --ssl-cert ./ssl/cert.pem --ssl-key ./ssl/key.pem > serve.log 2>&1 &
+
+# 5) Prevent it from being killed when you close the SSH session
 disown
 
-echo "Frontend server restarted on port 5000 (logs → serve.log)"
+echo "Frontend server restarted on port 3006 with HTTPS (logs → serve.log)"

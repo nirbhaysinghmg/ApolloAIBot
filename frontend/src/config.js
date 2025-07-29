@@ -4,8 +4,8 @@ const config = {
   companyLogo: "assets/images/apollo-tyres-logo-png_seeklogo-314374.png",
   agentName: "Apollo AI Agent",
   projectName: "Apollo Tyres AI bot",
-  chatUrl: "ws://150.241.244.252:8008/ws", // Changed from ws://localhost:8008/ws/chat
-  phoneSubmitUrl: "http://localhost:8008/api/mobile",
+  chatUrl: window.location.protocol === 'https:' ? "wss://150.241.244.252:9006/chat/ws" : "ws://150.241.244.252:9006/chat/ws", // WebSocket endpoint in chat router
+  phoneSubmitUrl: window.location.protocol === 'https:' ? "https://150.241.244.252:9006/api/mobile" : "http://150.241.244.252:9006/api/mobile",
   theme: {
     primaryColor: "#0066cc",
     secondaryColor: "#f0f0f0",
@@ -16,56 +16,19 @@ const config = {
   introductionText: `
 ### 👋 Welcome to our AI Help Chat.
   `,
-  // Suggested questions that will appear after assistant replies
-  suggestedQuestions: [
-    // Four Wheeler Tyres - Popular Brands
-    "Show me tyres for Maruti Suzuki cars",
-    "Show me tyres for Hyundai vehicles",
-    "Show me tyres for Toyota cars",
-    "Show me tyres for Honda vehicles",
-    "Show me tyres for Mahindra & Mahindra cars",
-    "Show me tyres for Tata Motors vehicles",
-    "Show me tyres for Ford cars",
-
-    // Four Wheeler Tyres - By Body Type
-    "Best tyres for small cars",
-    "Best tyres for hatchbacks",
-    "Best tyres for premium hatchbacks",
-    "Best tyres for SUVs",
-    "Best tyres for compact SUVs",
-    "Best tyres for all terrain SUVs",
-    "Best tyres for luxury SUVs",
-    "Best tyres for sedans",
-    "Best tyres for luxury sedans",
-
-    // Four Wheeler Tyres - By Rim Size
-    "Show me R14 - 14 inch tyres",
-    "Show me R15 - 15 inch tyres",
-    "Show me R16 - 16 inch tyres",
-    "Show me R17 - 17 inch tyres",
-    "Show me R18 - 18 inch tyres",
-    "Show me R19 - 19 inch tyres",
-    "Show me R20 - 20 inch tyres",
-
-    // Two Wheeler Tyres - Popular Brands
-    "Show me tyres for Hero bikes",
-    "Show me tyres for Honda bikes",
-    "Show me tyres for Royal Enfield bikes",
-    "Show me tyres for Bajaj bikes",
-    "Show me tyres for TVS bikes",
-    "Show me tyres for Yamaha bikes",
-
-    // Two Wheeler Tyres - By Bike Segment
-    "Best tyres for sport touring bikes",
-    "Best tyres for city urban bikes",
-    "Best tyres for cruisers",
-    "Best tyres for enduro bikes",
-    "Best tyres for scooters",
-    "Best tyres for street sports bikes",
+  // Initial hardcoded suggested questions (first 5)
+  initialSuggestedQuestions: [
+    "What is the warranty period for Apollo tyres?",
+    "How do I claim warranty for my tyres?",
+    "What is covered under tyre warranty?",
+    "How to check warranty status of my tyres?",
+    "What documents are needed for warranty claim?",
   ],
   // Number of questions to show at a time (default: 3)
   showNumberOfQuestions: 3,
   inputPlaceholder: "Type your question here...",
+  // API endpoint for generating dynamic questions
+  dynamicQuestionsUrl: window.location.protocol === 'https:' ? "https://150.241.244.252:9006/chat/generate-questions" : "http://150.241.244.252:9006/chat/generate-questions",
 };
 
 export default config;

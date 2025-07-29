@@ -37,10 +37,23 @@
   border-radius: 50%;
 }
 
+.header-info {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .chat-title {
   margin: 0;
   font-size: 16px;
-  flex-grow: 1;
+  font-weight: 600;
+}
+
+.location-indicator {
+  font-size: 11px;
+  opacity: 0.9;
+  font-weight: 400;
 }
 
 .header-buttons {
@@ -904,9 +917,12 @@
   text-align: left;
   animation: scaleIn 0.4s ease;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-wrap: break-word;
+  line-height: 1.4;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
 }
 
 #chatbot .suggestion-button:hover {
@@ -920,6 +936,21 @@
   transform: translateY(0);
 }
 
+#chatbot .suggestion-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#chatbot .suggestions-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
+  color: #666;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
 @media only screen and (max-width: 600px) {
   #chatbot .suggestions {
     flex-direction: column;
@@ -930,6 +961,10 @@
     width: 100%;
     white-space: normal;
     text-align: left;
+    word-wrap: break-word;
+    line-height: 1.4;
+    min-height: 44px;
+    padding: 12px 16px;
   }
 }
 

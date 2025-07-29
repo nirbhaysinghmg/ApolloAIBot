@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useChatSocket } from "../hooks/useChatSocket";
 import defaultConfig from "../config";
+import { getSuggestedQuestions, extractCurrentTopic } from "../utils/dynamicQuestions";
 import "./ChatWidget.css"; // Import CSS from the same directory
 
 const FeedbackPrompt = ({ onYes, onNo }) => (
@@ -73,7 +74,6 @@ const FeedbackForm = ({ onClose, onSubmit }) => {
   const [issues, setIssues] = useState([]);
   const [otherText, setOtherText] = useState("");
   const [supportOption, setSupportOption] = useState("");
-  const [execMethod, setExecMethod] = useState("");
 
   const issueOptions = [
     { value: "off-topic", label: "The answer was off-topic" },
@@ -94,15 +94,13 @@ const FeedbackForm = ({ onClose, onSubmit }) => {
 
   const canSubmit =
     issues.length > 0 &&
-    supportOption &&
-    (supportOption !== "talk-exec" || execMethod);
+    supportOption;
 
   const handleSubmit = () => {
     const feedback = {
       issues,
       otherText: issues.includes("other") ? otherText : "",
       supportOption,
-      execMethod: supportOption === "talk-exec" ? execMethod : "",
     };
     onSubmit(feedback);
   };
@@ -181,48 +179,7 @@ const FeedbackForm = ({ onClose, onSubmit }) => {
           Talk to a human executive
         </label>
       </div>
-      {supportOption === "talk-exec" && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>
-            Preferred method to connect?
-          </div>
-          <label>
-            <input
-              type="radio"
-              name="exec-method"
-              value="chat"
-              checked={execMethod === "chat"}
-              onChange={() => setExecMethod("chat")}
-              style={{ marginRight: 6 }}
-            />
-            Chat now
-          </label>
-          <br />
-          <label>
-            <input
-              type="radio"
-              name="exec-method"
-              value="call"
-              checked={execMethod === "call"}
-              onChange={() => setExecMethod("call")}
-              style={{ marginRight: 6 }}
-            />
-            Schedule a call
-          </label>
-          <br />
-          <label>
-            <input
-              type="radio"
-              name="exec-method"
-              value="email"
-              checked={execMethod === "email"}
-              onChange={() => setExecMethod("email")}
-              style={{ marginRight: 6 }}
-            />
-            Email me back
-          </label>
-        </div>
-      )}
+
       <div style={{ display: "flex", gap: 8 }}>
         <button
           style={{
@@ -277,7 +234,6 @@ document.head.appendChild(styleSheet);
 const ChatWidget = ({ config: userConfig }) => {
   // Merge config with defaults
   const cfg = { ...defaultConfig, ...userConfig };
-  const allQuestions = cfg.suggestedQuestions || [];
   const triggerCount = Number.isInteger(cfg.showNumberOfQuestions)
     ? cfg.showNumberOfQuestions
     : 3;
@@ -301,9 +257,8 @@ const ChatWidget = ({ config: userConfig }) => {
 
   // Suggestions state
   const [usedQuestions, setUsedQuestions] = useState([]);
-  const [suggestions, setSuggestions] = useState(
-    allQuestions.slice(0, triggerCount)
-  );
+  const [suggestions, setSuggestions] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   // Feedback state
   const [feedbackState, setFeedbackState] = useState({
@@ -313,10 +268,50 @@ const ChatWidget = ({ config: userConfig }) => {
     submitted: false,
   });
 
-  // Track session start time
+  // Track session start time and location
   const [sessionStartTime, setSessionStartTime] = useState(Date.now());
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationDisplay, setLocationDisplay] = useState("");
+  
+  // Function to get city name from coordinates
+  const getCityFromCoordinates = async (latitude, longitude) => {
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1&accept-language=en`);
+      if (response.ok) {
+        const data = await response.json();
+        const address = data.address;
+        return address.city || address.town || address.village || address.municipality || address.county || address.state || null;
+      }
+    } catch (error) {
+      console.error('Error getting city name:', error);
+    }
+    return null;
+  };
+  
   useEffect(() => {
     setSessionStartTime(Date.now());
+    
+    // Get location from localStorage if available
+    const storedLocation = localStorage.getItem('user_location');
+    if (storedLocation) {
+      try {
+        const location = JSON.parse(storedLocation);
+        setUserLocation(location);
+        
+        // Get city name if coordinates are available
+        if (location.latitude && location.longitude) {
+          getCityFromCoordinates(location.latitude, location.longitude).then(cityName => {
+            if (cityName) {
+              setLocationDisplay(`📍 ${cityName}`);
+            } else {
+              setLocationDisplay(`📍 ${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`);
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error parsing stored location:', error);
+      }
+    }
   }, []);
 
   const chatEndRef = useRef(null);
@@ -337,6 +332,25 @@ const ChatWidget = ({ config: userConfig }) => {
       userAgent: navigator.userAgent,
     });
   }, [trackUserAction]);
+
+  // Load initial suggestions
+  useEffect(() => {
+    const loadInitialSuggestions = async () => {
+      setLoadingSuggestions(true);
+      try {
+        const initialQuestions = await getSuggestedQuestions([], '');
+        setSuggestions(initialQuestions);
+      } catch (error) {
+        console.error('Error loading initial suggestions:', error);
+        // Fallback to initial questions from config
+        setSuggestions(cfg.initialSuggestedQuestions.slice(0, triggerCount));
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    };
+    
+    loadInitialSuggestions();
+  }, [cfg.initialSuggestedQuestions, triggerCount]);
 
   // Seed the initial system message
   useEffect(() => {
@@ -365,24 +379,39 @@ const ChatWidget = ({ config: userConfig }) => {
     }
   }, [input]);
 
-  // Clear suggestions when streaming
-  useEffect(() => {
-    if (streaming) setSuggestions([]);
-  }, [streaming]);
-
-  // Show suggestions after assistant reply
-  useEffect(() => {
-    let timer;
-    if (!streaming && chatHistory.some((m) => m.role === "assistant")) {
-      timer = setTimeout(() => {
-        const remaining = allQuestions.filter(
-          (q) => !usedQuestions.includes(q)
-        );
-        setSuggestions(remaining.slice(0, triggerCount));
-      }, 2000);
+  // Update suggestions after each message
+  const updateSuggestions = useCallback(async () => {
+    if (chatHistory.length > 1) { // More than just the system message
+      setLoadingSuggestions(true);
+      try {
+        const currentTopic = extractCurrentTopic(chatHistory);
+        console.log('Updating suggestions with topic:', currentTopic, 'and history length:', chatHistory.length);
+        const newSuggestions = await getSuggestedQuestions(chatHistory, currentTopic);
+        console.log('New suggestions received:', newSuggestions);
+        setSuggestions(newSuggestions);
+      } catch (error) {
+        console.error('Error updating suggestions:', error);
+        // Keep current suggestions if update fails
+      } finally {
+        setLoadingSuggestions(false);
+      }
     }
-    return () => clearTimeout(timer);
-  }, [streaming, chatHistory, usedQuestions, allQuestions, triggerCount]);
+  }, [chatHistory]);
+
+  // Single useEffect to handle suggestion updates
+  useEffect(() => {
+    if (streaming) {
+      // Clear suggestions when streaming
+      setSuggestions([]);
+    } else if (chatHistory.length > 1) {
+      // Update suggestions when streaming stops and we have conversation history
+      const timer = setTimeout(() => {
+        updateSuggestions();
+      }, 500); // Small delay to ensure the response is complete
+      
+      return () => clearTimeout(timer);
+    }
+  }, [streaming, chatHistory, updateSuggestions]);
 
   // Show feedback prompt after each new assistant message
   useEffect(() => {
@@ -533,7 +562,7 @@ const ChatWidget = ({ config: userConfig }) => {
     try {
       // Capture lead in analytics
       const leadResponse = await fetch(
-        `http://150.241.244.252:8008/analytics/leads`,
+        `http://150.241.244.252:9006/analytics/leads`,
         {
           method: "POST",
           headers: {
@@ -613,15 +642,33 @@ const ChatWidget = ({ config: userConfig }) => {
   };
   const handleFeedbackFormSubmit = (data) => {
     setFeedbackState((f) => ({ ...f, showForm: false, submitted: true }));
-    // Optionally send feedback to backend here
+    
+    // Hide suggestions immediately
+    setSuggestions([]);
+    
+    // Show thank you message
+    setShowThankYou(true);
+    setTimeout(() => {
+      setShowThankYou(false);
+    }, 2000);
+    
     // If user opted for human handover, log it
     if (data.supportOption === "talk-exec") {
+      // Add support message to chat
+      setChatHistory((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: "Thanks you for sharing feedback. You can connect with our support team between 9am-6pm on number 1800-102-1838 TOLL FREE NUMBER"
+        }
+      ]);
+
       const userId = localStorage.getItem("healthcare_user_id") || "";
       const sessionId = localStorage.getItem("healthcare_session_id") || "";
       // Find the last user message
       const lastUserMsg =
         [...chatHistory].reverse().find((m) => m.role === "user")?.text || "";
-      fetch("http://150.241.244.252:8008/analytics/human_handover", {
+      fetch("http://150.241.244.252:9006/analytics/human_handover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -629,7 +676,6 @@ const ChatWidget = ({ config: userConfig }) => {
           session_id: sessionId,
           issues: data.issues,
           other_text: data.otherText,
-          method: data.execMethod,
           support_option: data.supportOption,
           requested_at: new Date()
             .toISOString()
@@ -640,6 +686,11 @@ const ChatWidget = ({ config: userConfig }) => {
         }),
       }).catch(() => {});
     }
+    
+    // Restore suggestions after 3 seconds
+    setTimeout(() => {
+      updateSuggestions();
+    }, 3000);
   };
   const handleFeedbackFormClose = () => {
     setFeedbackState((f) => ({ ...f, showForm: false }));
@@ -658,7 +709,7 @@ const ChatWidget = ({ config: userConfig }) => {
       "";
 
     // Record chatbot close event
-    fetch("http://150.241.244.252:8008/analytics/chatbot_close", {
+    fetch("http://150.241.244.252:9006/analytics/chatbot_close", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -676,7 +727,7 @@ const ChatWidget = ({ config: userConfig }) => {
     }).catch(() => {});
 
     // Record session end event
-    fetch("http://150.241.244.252:8008/analytics/session_end", {
+    fetch("http://150.241.244.252:9006/analytics/session_end", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -708,7 +759,14 @@ const ChatWidget = ({ config: userConfig }) => {
             alt={`${cfg.companyName} logo`}
             className="chat-logo"
           />
-          <h2 className="chat-title">{cfg.companyName} AI Assistant</h2>
+          <div className="header-info">
+            <h2 className="chat-title">{cfg.companyName} AI Assistant</h2>
+            {locationDisplay && (
+              <div className="location-indicator" title="Location-based session">
+                {locationDisplay}
+              </div>
+            )}
+          </div>
           <div className="header-buttons">
             <button
               onClick={toggleFullScreen}
@@ -898,6 +956,7 @@ const ChatWidget = ({ config: userConfig }) => {
                   key={i}
                   className="suggestion-button"
                   onClick={() => handleSuggestion(question)}
+                  disabled={loadingSuggestions}
                 >
                   {question}
                 </button>

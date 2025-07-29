@@ -11,7 +11,7 @@ const HealthcareAIWidget = {
     // Default configuration
     const config = {
       container: "#healthcare-ai-container",
-      baseUrl: "http://localhost:8000",
+      baseUrl: "http://150.241.244.252:9006",
       companyName: "Appolo tyres",
       companyLogo: "/logo.png",
       primaryColor: "#0066cc",

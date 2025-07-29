@@ -12,6 +12,21 @@ export const useChatSocket = (setChatHistory, setStreaming, customChatUrl) => {
 
   // Use the provided URL or fall back to default
   const chatUrl = customChatUrl;
+  
+  // Function to get city name from coordinates
+  const getCityFromCoordinates = async (latitude, longitude) => {
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1&accept-language=en`);
+      if (response.ok) {
+        const data = await response.json();
+        const address = data.address;
+        return address.city || address.town || address.village || address.municipality || address.county || address.state || null;
+      }
+    } catch (error) {
+      console.error('Error getting city name:', error);
+    }
+    return null;
+  };
 
   // Wait for the WebSocket to be open
   const waitForConnection = useCallback((timeout = 5000, interval = 500) => {
@@ -143,12 +158,16 @@ export const useChatSocket = (setChatHistory, setStreaming, customChatUrl) => {
         connectWebSocket();
 
         waitForConnection()
-          .then(() => {
+          .then(async () => {
             console.log("Connection established, sending message");
+            // Get location-based session ID if available, otherwise fallback to default
+            const locationSessionId = localStorage.getItem("location_session_id");
+            const userLocation = localStorage.getItem("user_location");
+            
             const userId =
               localStorage.getItem("healthcare_user_id") ||
               "user_" + Math.random().toString(36).substring(2, 15);
-            const sessionId =
+            const sessionId = locationSessionId || 
               localStorage.getItem("healthcare_session_id") ||
               "session_" + Math.random().toString(36).substring(2, 15);
 
@@ -158,6 +177,15 @@ export const useChatSocket = (setChatHistory, setStreaming, customChatUrl) => {
             }
             localStorage.setItem("healthcare_session_id", sessionId);
 
+            // Get location data and add city name
+            let locationData = userLocation ? JSON.parse(userLocation) : null;
+            if (locationData && locationData.latitude && locationData.longitude && !locationData.city) {
+              const cityName = await getCityFromCoordinates(locationData.latitude, locationData.longitude);
+              if (cityName) {
+                locationData.city = cityName;
+              }
+            }
+            
             const formattedMessage = {
               user_input: message.user_input || message,
               chat_history: chatHistoryRef.current.map((msg) => ({
@@ -166,6 +194,7 @@ export const useChatSocket = (setChatHistory, setStreaming, customChatUrl) => {
               })),
               user_id: userId,
               session_id: sessionId,
+              user_location: locationData,
             };
             console.log("Sending message:", formattedMessage);
             ws.current.send(JSON.stringify(formattedMessage));
@@ -184,10 +213,14 @@ export const useChatSocket = (setChatHistory, setStreaming, customChatUrl) => {
           });
       } else {
         console.log("Sending message via WebSocket");
+        // Get location-based session ID if available, otherwise fallback to default
+        const locationSessionId = localStorage.getItem("location_session_id");
+        const userLocation = localStorage.getItem("user_location");
+        
         const userId =
           localStorage.getItem("healthcare_user_id") ||
           "user_" + Math.random().toString(36).substring(2, 15);
-        const sessionId =
+        const sessionId = locationSessionId || 
           localStorage.getItem("healthcare_session_id") ||
           "session_" + Math.random().toString(36).substring(2, 15);
 
@@ -197,6 +230,16 @@ export const useChatSocket = (setChatHistory, setStreaming, customChatUrl) => {
         }
         localStorage.setItem("healthcare_session_id", sessionId);
 
+        // Get location data and add city name
+        let locationData = userLocation ? JSON.parse(userLocation) : null;
+        if (locationData && locationData.latitude && locationData.longitude && !locationData.city) {
+          getCityFromCoordinates(locationData.latitude, locationData.longitude).then(cityName => {
+            if (cityName) {
+              locationData.city = cityName;
+            }
+          });
+        }
+        
         const formattedMessage = {
           user_input: message.user_input || message,
           chat_history: chatHistoryRef.current.map((msg) => ({
@@ -205,6 +248,7 @@ export const useChatSocket = (setChatHistory, setStreaming, customChatUrl) => {
           })),
           user_id: userId,
           session_id: sessionId,
+          user_location: locationData,
         };
         console.log("Sending message:", formattedMessage);
         ws.current.send(JSON.stringify(formattedMessage));
@@ -215,10 +259,14 @@ export const useChatSocket = (setChatHistory, setStreaming, customChatUrl) => {
 
   // Add analytics tracking
   const trackUserAction = useCallback((action, details = {}) => {
+    // Get location-based session ID if available, otherwise fallback to default
+    const locationSessionId = localStorage.getItem("location_session_id");
+    const userLocation = localStorage.getItem("user_location");
+    
     const userId =
       localStorage.getItem("healthcare_user_id") ||
       "user_" + Math.random().toString(36).substring(2, 15);
-    const sessionId =
+    const sessionId = locationSessionId || 
       localStorage.getItem("healthcare_session_id") ||
       "session_" + Math.random().toString(36).substring(2, 15);
 
@@ -235,6 +283,7 @@ export const useChatSocket = (setChatHistory, setStreaming, customChatUrl) => {
       action,
       userId,
       sessionId,
+      userLocation: userLocation ? JSON.parse(userLocation) : null,
       timestamp: new Date().toISOString(),
       ...details,
     };
